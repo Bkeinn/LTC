@@ -1,0 +1,1 @@
+-I basetest_encode.txt -O basetest_decode.hm -T 0
