@@ -34,6 +34,11 @@ enum State {
     Decoding,
 }
 
+enum Wait {
+    Stop,
+    Unfolding(u8),
+}
+
 #[inline]
 fn breakwater_to_start(byte: u8) -> bool {
     if byte == 0b11111111u8 {
@@ -65,139 +70,10 @@ fn crack_collaps(byte: u8) -> (u8, u8) {
     return ((byte & 0b11110000u8) >> 4, byte & 0b00001111u8);
 }
 
-// 0 is neares to the unfold number
-struct Return_array_4 {
-    filled_to: u8,
-    array: [u8; 4],
-}
-
-impl Return_array_4 {
-    fn add_one(&mut self, bit: u8) {
-        if self.filled_to <= 3 {
-            self.array[3 - self.filled_to as usize] = bit;
-            self.filled_to += 1;
-        }
-    }
-    fn add_two(&mut self, bit: (u8, u8)) {
-        match self.filled_to {
-            3 => self.add_one(bit.1),
-            4 => {}
-            _ => {
-                self.array[3 - self.filled_to as usize] = bit.1;
-                self.array[3 - (self.filled_to as usize + 1)] = bit.0;
-                self.filled_to += 2;
-            }
-        }
-    }
-    fn out(&self) -> [u8; 4] {
-        return self.array;
-    }
-}
-
-struct ReturnArray3 {
-    filled_to: u8,
-    array: [u8; 3],
-}
-
-impl ReturnArray3 {
-    fn add_one(&mut self, bit: u8) {
-        if self.filled_to <= 2 {
-            self.array[self.filled_to as usize] = bit;
-            self.filled_to += 1;
-        }
-    }
-    fn add_two(&mut self, bit: (u8, u8)) {
-        match self.filled_to {
-            2 => self.add_one(bit.0),
-            3 => {}
-            _ => {
-                self.array[self.filled_to as usize] = bit.0;
-                self.array[self.filled_to as usize + 1] = bit.1;
-                self.filled_to += 2;
-            }
-        }
-    }
-    fn out(&self) -> [u8; 3] {
-        return self.array;
-    }
-}
-
-fn get_previous_bytes(
-    previous_bytes: &[u8; 5],
-    iteration_number: usize,
-    buffer: &[u8; BUFFERMAX],
-    current_part: bool,
-) -> [u8; 4] {
-    let mut array = Return_array_4 {
-        filled_to: 0,
-        array: [0; 4],
-    };
-    // Wenn der zweite Teil eines Bytes berechnet wird muss der erste auch mit einbezogen werden
-    if current_part {
-        array.add_one(crack_collaps(buffer[iteration_number]).0);
-    }
-    let mut umgebrochen = false;
-    for i in 1..6 {
-        let current_number = if iteration_number >= i {
-            buffer[iteration_number - i]
-        } else {
-            previous_bytes[5 - (i - iteration_number)]
-        };
-        if breakwater_to_start(current_number) && umgebrochen == false {
-            umgebrochen = true;
-        } else {
-            match umgebrochen {
-                true => array.add_one(current_number),
-                false => array.add_two(crack_collaps(current_number)),
-            }
-        }
-        if array.filled_to >= 4 {
-            return array.out();
-        }
-    }
-    // }
-    panic!("Could not fill looking back array");
-}
-
-fn get_previous_bytes_promis(
-    iteration_number: usize,
-    buffer: &[u8; 14],
-    current_part: bool,
-) -> [u8; 4] {
-    let mut array = Return_array_4 {
-        filled_to: 0,
-        array: [0; 4],
-    };
-    // Wenn der zweite Teil eines Bytes berechnet wird muss der erste auch mit einbezogen werden
-    if current_part {
-        array.add_one(crack_collaps(buffer[iteration_number]).0);
-    }
-    let mut umgebrochen = false;
-    for i in 1..6 {
-        if breakwater_to_start(buffer[iteration_number - (i)]) && umgebrochen == false {
-            umgebrochen = true;
-        } else {
-            match umgebrochen {
-                true => array.add_one(buffer[iteration_number - (i)]),
-                false => array.add_two(crack_collaps(buffer[iteration_number - (i)])),
-            }
-        }
-        if array.filled_to >= 4 {
-            return array.out();
-        }
-    }
-    panic!("Could not fill looking back array");
-}
-
-#[inline]
-fn lookforward_local(iteration_number: usize) -> bool {
-    if iteration_number >= BUFFERMAX - 5 {
-        return false;
-    }
-    return true;
-}
-
 fn unfold(befor_array: [u8; 4], questenion_char: u8, after_array: [u8; 3]) -> char {
+    if questenion_char > 15 {
+        return questenion_char as char;
+    }
     if questenion_char == 13 {
         return ' ';
     }
@@ -290,77 +166,18 @@ fn get_variable_value(
     }
 }
 
-// Current part, muss immer anders sein. Wenn get_next_byte = true dann muss get_previous_byte = false und anders rum
-fn get_next_bytes_local(
-    iteration_number: usize,
-    buffer: &[u8; BUFFERMAX],
-    current_part: bool,
-) -> [u8; 3] {
-    let mut array = ReturnArray3 {
-        filled_to: 0,
-        array: [0; 3],
-    };
-    let mut umgebrochen = false;
-    if current_part {
-        if breakwater_to_end(buffer[iteration_number]) {
-            umgebrochen = true;
-        } else {
-            array.add_one(crack_collaps(buffer[iteration_number]).1);
-        }
+fn outputbuffer_writer(
+    output_writer: &mut BufWriter<&File>,
+    to_write: &[u8],
+    pass_counter: &mut u8,
+) {
+    if *pass_counter == 0 {
+        output_writer
+            .write_all(to_write)
+            .expect("Could not write to file");
+    } else {
+        *pass_counter -= 1;
     }
-    for i in 1..5 {
-        if breakwater_to_end(buffer[iteration_number + i]) && umgebrochen == false {
-            umgebrochen = true;
-            if !breakwater_to_start(buffer[iteration_number + i]) {
-                array.add_one(crack_collaps(buffer[iteration_number + i]).0);
-            }
-        } else {
-            match umgebrochen {
-                false => array.add_two(crack_collaps(buffer[iteration_number + i])),
-                true => array.add_one(buffer[iteration_number + i]),
-            }
-        }
-        if array.filled_to == 3 {
-            return array.out();
-        }
-    }
-    panic!("could not fill next bytes")
-}
-
-fn get_next_bytes_local_promis(
-    iteration_number: usize,
-    buffer: &[u8; 14],
-    current_part: bool,
-) -> [u8; 3] {
-    let mut array = ReturnArray3 {
-        filled_to: 0,
-        array: [0; 3],
-    };
-    let mut umgebrochen = false;
-    if current_part {
-        if breakwater_to_end(buffer[iteration_number]) {
-            umgebrochen = true;
-        } else {
-            array.add_one(crack_collaps(buffer[iteration_number]).1);
-        }
-    }
-    for i in 1..5 {
-        if breakwater_to_end(buffer[iteration_number + i]) && umgebrochen == false {
-            umgebrochen = true;
-            if !breakwater_to_start(buffer[iteration_number + i]) {
-                array.add_one(crack_collaps(buffer[iteration_number + i]).0);
-            }
-        } else {
-            match umgebrochen {
-                false => array.add_two(crack_collaps(buffer[iteration_number + i])),
-                true => array.add_one(buffer[iteration_number + i]),
-            }
-        }
-        if array.filled_to == 3 {
-            return array.out();
-        }
-    }
-    panic!("could not fill next bytes")
 }
 
 #[cfg(test)]
@@ -387,61 +204,11 @@ mod tests {
         assert_eq!(breakwater_to_end(47), true);
     }
     #[test]
-    fn return_array_test() {
-        let mut struct_test = Return_array_4 {
-            filled_to: 0,
-            array: [0; 4],
-        };
-        // 4 3 2 1 0
-        struct_test.add_one(0);
-        struct_test.add_two((2, 1));
-        struct_test.add_two((4, 3));
-        assert_eq!([3, 2, 1, 0], struct_test.out())
-    }
-    #[test]
-    fn get_previous_bytes_test() {
-        let mut results = [[0; 4]; 4];
-        let mut buffer = [0; BUFFERMAX];
-        buffer[0] = 86;
-        buffer[1] = 120;
-        buffer[2] = 154;
-        buffer[3] = 188;
-        let previous_bytes = [1, 2, 3, 4, 255];
-        for i in 0..4 {
-            let boolean = false;
-            results[i] = get_previous_bytes(&previous_bytes, i, &buffer, boolean);
-        }
-        assert_eq!(
-            results,
-            [[1, 2, 3, 4], [3, 4, 5, 6], [5, 6, 7, 8], [7, 8, 9, 10]]
-        );
-        assert_eq!(
-            get_previous_bytes(&[105, 110, 99, 255, 43], 0, &buffer, false),
-            [110, 99, 2, 11]
-        );
-    }
-    #[test]
     fn crack_collaps_test() {
         assert_eq!(crack_collaps(86), (5, 6));
         assert_eq!(crack_collaps(120), (7, 8));
         assert_eq!(crack_collaps(154), (9, 10));
         assert_eq!(crack_collaps(188), (11, 12));
-    }
-
-    #[test]
-    fn get_next_bytes_local_test() {
-        let mut buffer: [u8; BUFFERMAX] = [0; BUFFERMAX];
-        buffer[0] = 1;
-        buffer[1] = 47;
-        buffer[2] = 3;
-        buffer[3] = 4;
-        assert_eq!(get_next_bytes_local(0, &buffer, true), [1, 2, 3]); // true == es wird der erste teil des Bytes entschluesselt, also wird erst der zweite mit genommen
-        assert_eq!(get_next_bytes_local(0, &buffer, false), [2, 3, 4]); // false == es wird der zweite teil entschluesselt, also wird erst der naechste byte mit genommen
-        buffer[1] = 48;
-        buffer[2] = 205;
-        buffer[3] = 255;
-        buffer[4] = 104;
-        assert_eq!(get_next_bytes_local(1, &buffer, false), [12, 13, 104])
     }
     #[test]
     fn unfold_test() {
@@ -466,135 +233,121 @@ impl Decoder {
         }
     }
     pub fn decode(&mut self) -> Result<(), std::io::Error> {
-        let mut promis = [0; 14];
-        let mut promis_made = false;
+        let mut rotation_array: [u8; 8] = [0; 8];
         let mut buffer = [0; BUFFERMAX];
         let mut state: State = State::Skipping;
         let mut output_writer = BufWriter::new(&self.write_file);
-        // ----- Previous bytes management
-        /// This is needed if it is decoding while the buffer changes
-        let mut previous_last_bytes: [u8; 5] = [0; 5];
+        let mut waiter: Wait = Wait::Stop;
+        // ----- Beginnign
+        let mut pass_counter: u8 = 8;
+        // ----- End
         loop {
             let byte_read = self.read_file.read(&mut buffer)?;
             if byte_read == 0 {
                 break;
             }
-
-            if promis_made {
-                promis[10] = match buffer.get(0) {
-                    Some(&value) => value,
-                    None => 0,
-                };
-                promis[11] = match buffer.get(1) {
-                    Some(&value) => value,
-                    None => 0,
-                };
-                promis[12] = match buffer.get(2) {
-                    Some(&value) => value,
-                    None => 0,
-                };
-                promis[13] = match buffer.get(3) {
-                    Some(&value) => value,
-                    None => 0,
-                };
-                // eprintln!("PROMIS = {:?}", promis);
-                for i in 5..10 {
-                    match state {
-                        State::Skipping => {
-                            if breakwater_to_start(promis[i]) {
-                                state = State::Decoding;
-                            } else {
-                                output_writer.write(&[promis[i]])?;
-                            }
-                        }
-                        State::Decoding => match breakwater_to_end(promis[i]) {
-                            true => match breakwater_to_start(promis[i]) {
-                                true => state = State::Skipping,
-                                false => {
-                                    output_writer
-                                        .write_all(&[unfold(
-                                            get_previous_bytes_promis(i, &promis, false),
-                                            crack_collaps(promis[i]).0,
-                                            get_next_bytes_local_promis(i, &promis, true),
-                                        )
-                                            as u8])
-                                        .expect("Could not write to file");
-                                    state = State::Skipping;
-                                }
-                            },
-                            false => output_writer
-                                .write_all(&[
-                                    unfold(
-                                        get_previous_bytes_promis(i, &promis, false),
-                                        crack_collaps(promis[i]).0,
-                                        get_next_bytes_local_promis(i, &promis, true),
-                                    ) as u8,
-                                    unfold(
-                                        get_previous_bytes_promis(i, &promis, true),
-                                        crack_collaps(promis[i]).1,
-                                        get_next_bytes_local_promis(i, &promis, false),
-                                    ) as u8,
-                                ])
-                                .expect("Could not write to file"),
-                        },
-                    }
-                }
-            }
-
             for i in 0..byte_read {
-                if !lookforward_local(i) {
-                    break;
+                match waiter {
+                    Wait::Unfolding(val) if val > 0 => {
+                        waiter = Wait::Unfolding(val - 1);
+                        let befor_array = [
+                            rotation_array[0],
+                            rotation_array[1],
+                            rotation_array[2],
+                            rotation_array[3],
+                        ];
+                        let after_array = [rotation_array[5], rotation_array[6], rotation_array[7]];
+                        rotation_array[4] =
+                            unfold(befor_array, rotation_array[4], after_array) as u8;
+                        state = State::Skipping;
+                    }
+                    Wait::Unfolding(val) if val == 0 => waiter = Wait::Stop,
+                    _ => (),
                 }
                 match state {
                     State::Skipping => {
                         if breakwater_to_start(buffer[i]) {
                             state = State::Decoding;
                         } else {
-                            output_writer.write(&[buffer[i]])?;
+                            outputbuffer_writer(
+                                &mut output_writer,
+                                &[rotation_array[0]],
+                                &mut pass_counter,
+                            );
+                            rotation_array.rotate_left(1);
+                            rotation_array[7] = buffer[i];
                         }
                     }
                     State::Decoding => match breakwater_to_end(buffer[i]) {
-                        true => match breakwater_to_start(buffer[i]) {
-                            true => state = State::Skipping,
-                            false => {
-                                output_writer
-                                    .write_all(&[unfold(
-                                        get_previous_bytes(&previous_last_bytes, i, &buffer, false),
-                                        crack_collaps(buffer[i]).0,
-                                        get_next_bytes_local(i, &buffer, true),
-                                    ) as u8])
-                                    .expect("Could not write to file");
-                                state = State::Skipping;
+                        true => {
+                            match breakwater_to_start(buffer[i]) {
+                                true => state = State::Skipping,
+                                false => {
+                                    outputbuffer_writer(
+                                        &mut output_writer,
+                                        &[rotation_array[0]],
+                                        &mut pass_counter,
+                                    );
+                                    rotation_array.rotate_left(1);
+                                    rotation_array[7] = crack_collaps(buffer[i]).0;
+                                }
                             }
-                        },
+                            let befor_array = [
+                                rotation_array[0],
+                                rotation_array[1],
+                                rotation_array[2],
+                                rotation_array[3],
+                            ];
+                            let after_array =
+                                [rotation_array[5], rotation_array[6], rotation_array[7]];
+                            rotation_array[4] =
+                                unfold(befor_array, rotation_array[4], after_array) as u8;
+                            state = State::Skipping;
+                            waiter = Wait::Unfolding(4);
+                        }
                         false => {
-                            output_writer
-                                .write_all(&[
-                                    unfold(
-                                        get_previous_bytes(&previous_last_bytes, i, &buffer, false),
-                                        crack_collaps(buffer[i]).0,
-                                        get_next_bytes_local(i, &buffer, true),
-                                    ) as u8,
-                                    unfold(
-                                        get_previous_bytes(&previous_last_bytes, i, &buffer, true),
-                                        crack_collaps(buffer[i]).1,
-                                        get_next_bytes_local(i, &buffer, false),
-                                    ) as u8,
-                                ])
-                                .expect("Could not write to file");
+                            for push in 0..2 {
+                                outputbuffer_writer(
+                                    &mut output_writer,
+                                    &[rotation_array[0]],
+                                    &mut pass_counter,
+                                );
+                                rotation_array.rotate_left(1);
+                                if push == 0 {
+                                    rotation_array[7] = crack_collaps(buffer[i]).0;
+                                } else {
+                                    rotation_array[7] = crack_collaps(buffer[i]).1;
+                                }
+                                let befor_array = [
+                                    rotation_array[0],
+                                    rotation_array[1],
+                                    rotation_array[2],
+                                    rotation_array[3],
+                                ];
+                                let after_array =
+                                    [rotation_array[5], rotation_array[6], rotation_array[7]];
+                                rotation_array[4] =
+                                    unfold(befor_array, rotation_array[4], after_array) as u8;
+                            }
                         }
                     },
                 }
             }
-            if byte_read >= 5 {
-                previous_last_bytes.copy_from_slice(&buffer[(byte_read - 5)..byte_read]);
-            }
-            /// Wenn der Buffer endet aber der file noch nicht, kann es sein dass man die letzten Zeichen zum dekodieren, des naechsten buffers braucht
-            if byte_read == BUFFERMAX {
-                promis_made = true;
-                promis.copy_from_slice(&buffer[(BUFFERMAX - 14)..BUFFERMAX])
-            }
         }
+        match waiter {
+            Wait::Unfolding(val) => {
+                let befor_array = [
+                    rotation_array[0],
+                    rotation_array[1],
+                    rotation_array[2],
+                    rotation_array[3],
+                ];
+                let after_array = [rotation_array[5], rotation_array[6], rotation_array[7]];
+                rotation_array[4] = unfold(befor_array, rotation_array[4], after_array) as u8;
+            }
+            _ => (),
+        }
+        output_writer.write_all(&rotation_array);
         output_writer.flush()?;
         Ok(())
     }
