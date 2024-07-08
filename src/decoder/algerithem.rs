@@ -1,40 +1,79 @@
 mod daten;
 use daten::*;
-pub fn get_variable(charactar_base: char, depth: i16, for_char: char) -> f32 {
-    // println!(
-    //     "character base: {}, character_depth: {}, for char: {}",
-    //     &charactar_base, &depth, &for_char
-    // );
-    match charactar_base {
-        'a' => return get_value_from_for_char(for_char, get_exact_array_A(depth)),
-        'b' => return get_value_from_for_char(for_char, get_exact_array_B(depth)),
-        'c' => return get_value_from_for_char(for_char, get_exact_array_C(depth)),
-        'd' => return get_value_from_for_char(for_char, get_exact_array_D(depth)),
-        'e' => return get_value_from_for_char(for_char, get_exact_array_E(depth)),
-        'f' => return get_value_from_for_char(for_char, get_exact_array_F(depth)),
-        'g' => return get_value_from_for_char(for_char, get_exact_array_G(depth)),
-        'h' => return get_value_from_for_char(for_char, get_exact_array_H(depth)),
-        'i' => return get_value_from_for_char(for_char, get_exact_array_I(depth)),
-        'j' => return get_value_from_for_char(for_char, get_exact_array_J(depth)),
-        'k' => return get_value_from_for_char(for_char, get_exact_array_K(depth)),
-        'l' => return get_value_from_for_char(for_char, get_exact_array_L(depth)),
-        'm' => return get_value_from_for_char(for_char, get_exact_array_M(depth)),
-        'n' => return get_value_from_for_char(for_char, get_exact_array_N(depth)),
-        'o' => return get_value_from_for_char(for_char, get_exact_array_O(depth)),
-        'p' => return get_value_from_for_char(for_char, get_exact_array_P(depth)),
-        'q' => return get_value_from_for_char(for_char, get_exact_array_Q(depth)),
-        'r' => return get_value_from_for_char(for_char, get_exact_array_R(depth)),
-        's' => return get_value_from_for_char(for_char, get_exact_array_S(depth)),
-        't' => return get_value_from_for_char(for_char, get_exact_array_T(depth)),
-        'u' => return get_value_from_for_char(for_char, get_exact_array_U(depth)),
-        'v' => return get_value_from_for_char(for_char, get_exact_array_V(depth)),
-        'w' => return get_value_from_for_char(for_char, get_exact_array_W(depth)),
-        'x' => return get_value_from_for_char(for_char, get_exact_array_X(depth)),
-        'y' => return get_value_from_for_char(for_char, get_exact_array_Y(depth)),
-        'z' => return get_value_from_for_char(for_char, get_exact_array_Z(depth)),
-        // ' ' => return get_value_from_for_char(for_char, get_exact_array_SPACE(depth)),
-        _ => panic!("get varibale did not get an supported char ->{charactar_base}<-"),
-    }
+use ndarray::Array3;
+
+pub fn get_variable(charactar_base: char, depth: u8, for_char: char, dataset: &Array3<f64>) -> f64 {
+    return *(dataset
+        .get((
+            converter(charactar_base),
+            converter(for_char),
+            depth as usize,
+        ))
+        .unwrap());
+    // match charactar_base {
+    //     'a' => return get_value_from_for_char(for_char, get_exact_array_A(depth)),
+    //     'b' => return get_value_from_for_char(for_char, get_exact_array_B(depth)),
+    //     'c' => return get_value_from_for_char(for_char, get_exact_array_C(depth)),
+    //     'd' => return get_value_from_for_char(for_char, get_exact_array_D(depth)),
+    //     'e' => return get_value_from_for_char(for_char, get_exact_array_E(depth)),
+    //     'f' => return get_value_from_for_char(for_char, get_exact_array_F(depth)),
+    //     'g' => return get_value_from_for_char(for_char, get_exact_array_G(depth)),
+    //     'h' => return get_value_from_for_char(for_char, get_exact_array_H(depth)),
+    //     'i' => return get_value_from_for_char(for_char, get_exact_array_I(depth)),
+    //     'j' => return get_value_from_for_char(for_char, get_exact_array_J(depth)),
+    //     'k' => return get_value_from_for_char(for_char, get_exact_array_K(depth)),
+    //     'l' => return get_value_from_for_char(for_char, get_exact_array_L(depth)),
+    //     'm' => return get_value_from_for_char(for_char, get_exact_array_M(depth)),
+    //     'n' => return get_value_from_for_char(for_char, get_exact_array_N(depth)),
+    //     'o' => return get_value_from_for_char(for_char, get_exact_array_O(depth)),
+    //     'p' => return get_value_from_for_char(for_char, get_exact_array_P(depth)),
+    //     'q' => return get_value_from_for_char(for_char, get_exact_array_Q(depth)),
+    //     'r' => return get_value_from_for_char(for_char, get_exact_array_R(depth)),
+    //     's' => return get_value_from_for_char(for_char, get_exact_array_S(depth)),
+    //     't' => return get_value_from_for_char(for_char, get_exact_array_T(depth)),
+    //     'u' => return get_value_from_for_char(for_char, get_exact_array_U(depth)),
+    //     'v' => return get_value_from_for_char(for_char, get_exact_array_V(depth)),
+    //     'w' => return get_value_from_for_char(for_char, get_exact_array_W(depth)),
+    //     'x' => return get_value_from_for_char(for_char, get_exact_array_X(depth)),
+    //     'y' => return get_value_from_for_char(for_char, get_exact_array_Y(depth)),
+    //     'z' => return get_value_from_for_char(for_char, get_exact_array_Z(depth)),
+    //     // ' ' => return get_value_from_for_char(for_char, get_exact_array_SPACE(depth)),
+    //     _ => panic!("get varibale did not get an supported char ->{charactar_base}<-"),
+    // }
+}
+
+const fn converter(characer: char) -> usize {
+    return match characer {
+        'a' => 0,
+        'b' => 1,
+        'c' => 2,
+        'd' => 3,
+        'e' => 4,
+        'f' => 5,
+        'g' => 6,
+        'h' => 7,
+        'i' => 8,
+        'j' => 9,
+        'k' => 10,
+        'l' => 11,
+        'm' => 12,
+        'n' => 13,
+        'o' => 14,
+        'p' => 15,
+        'q' => 16,
+        'r' => 17,
+        's' => 18,
+        't' => 19,
+        'u' => 20,
+        'v' => 21,
+        'w' => 22,
+        'x' => 23,
+        'y' => 24,
+        'z' => 25,
+        ' ' => 26,
+        '.' => 27,
+        _ => panic!("This character is not supported"),
+    };
 }
 
 fn get_exact_array_A(depth: i16) -> [f32; 28] {

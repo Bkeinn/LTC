@@ -55,7 +55,7 @@ fn breakwater_to_end(byte: u8) -> bool {
     return false;
 }
 
-fn tanh(x: f32) -> f32 {
+fn tanh(x: f64) -> f64 {
     x.tanh()
 }
 
@@ -70,7 +70,12 @@ fn crack_collaps(byte: u8) -> (u8, u8) {
     return ((byte & 0b11110000u8) >> 4, byte & 0b00001111u8);
 }
 
-fn unfold(befor_array: [u8; 4], questenion_char: u8, after_array: [u8; 3]) -> char {
+fn unfold(
+    befor_array: [u8; 4],
+    questenion_char: u8,
+    after_array: [u8; 3],
+    dataset: &ndarray::Array3<f64>,
+) -> char {
     if questenion_char > 15 {
         return questenion_char as char;
     }
@@ -82,7 +87,7 @@ fn unfold(befor_array: [u8; 4], questenion_char: u8, after_array: [u8; 3]) -> ch
     }
     let first_char = get_two_possible_chars(questenion_char)[0];
     let secound_char = get_two_possible_chars(questenion_char)[1];
-    let secound_option: f64 = [4, 3, 2, 1, -1, -2, -3]
+    let secound_option: f64 = [0, 1, 2, 3, 5, 6, 7]
         .par_iter()
         .map(|&value| {
             tanh(get_variable_value(
@@ -90,20 +95,21 @@ fn unfold(befor_array: [u8; 4], questenion_char: u8, after_array: [u8; 3]) -> ch
                 value,
                 &befor_array,
                 &after_array,
+                dataset,
             )) as f64
                 * match value {
-                    1 | -1 => 2.0,
-                    -2 => 1.4,
+                    3 | 5 => 2.0,
+                    6 => 1.4,
                     2 => 1.3,
-                    -3 => 1.16,
-                    3 => 1.09,
-                    4 => 1.05,
+                    7 => 1.16,
+                    1 => 1.09,
+                    0 => 1.05,
                     _ => panic!("NOT POSSIBLE"),
                 }
         })
         .sum();
 
-    let first_option: f64 = [4, 3, 2, 1, -1, -2, -3]
+    let first_option: f64 = [0, 1, 2, 3, 5, 6, 7]
         .par_iter()
         .map(|&value| {
             tanh(get_variable_value(
@@ -111,14 +117,15 @@ fn unfold(befor_array: [u8; 4], questenion_char: u8, after_array: [u8; 3]) -> ch
                 value,
                 &befor_array,
                 &after_array,
+                dataset,
             )) as f64
                 * match value {
-                    1 | -1 => 2.0,
-                    -2 => 1.4,
-                    2 => 1.3,
-                    -3 => 1.16,
-                    3 => 1.09,
-                    4 => 1.05,
+                    3 | 5 => 2.0,
+                    2 => 1.4,
+                    6 => 1.3,
+                    7 => 1.16,
+                    1 => 1.09,
+                    0 => 1.05,
                     _ => panic!("NOT POSSIBLE"),
                 }
         })
@@ -134,30 +141,31 @@ fn unfold(befor_array: [u8; 4], questenion_char: u8, after_array: [u8; 3]) -> ch
 //Proprably: Looks at base char and then at the other and how propable is it that when base char is given, the other appear
 fn get_variable_value(
     character_base: char,
-    depth: i16,
+    depth: u8,
     befor_array: &[u8; 4],
     after_array: &[u8; 3],
-) -> f32 {
+    dataset: &ndarray::Array3<f64>,
+) -> f64 {
     let search_char = match depth {
-        4 => befor_array[0],
-        3 => befor_array[1],
+        0 => befor_array[0],
+        1 => befor_array[1],
         2 => befor_array[2],
-        1 => befor_array[3],
-        -1 => after_array[0],
-        -2 => after_array[1],
-        -3 => after_array[2],
+        3 => befor_array[3],
+        5 => after_array[0],
+        6 => after_array[1],
+        7 => after_array[2],
         _ => panic!("NOT POSSIBLE"),
     };
     if search_char > 15 {
-        return get_variable(character_base, depth, search_char as char) * 2.0;
+        return get_variable(character_base, depth, search_char as char, dataset) * 2.0;
     } else if search_char < 13 {
         let two_options: [char; 2] = get_two_possible_chars(search_char);
-        return get_variable(character_base, depth, two_options[0])
-            + get_variable(character_base, depth, two_options[1]);
+        return get_variable(character_base, depth, two_options[0], dataset)
+            + get_variable(character_base, depth, two_options[1], dataset);
     } else if search_char == 13 {
-        return get_variable(character_base, depth, ' ');
+        return get_variable(character_base, depth, ' ', dataset);
     } else if search_char == 14 {
-        return get_variable(character_base, depth, '.');
+        return get_variable(character_base, depth, '.', dataset);
     } else {
         eprintln!("character base = {}", character_base);
         eprintln!("search_char = {}", search_char);
@@ -212,8 +220,13 @@ mod tests {
     }
     #[test]
     fn unfold_test() {
-        assert_eq!(unfold([44, 32, 105, 110], 13, [116, 104, 101]), ' '); // If everything is clear
-        assert_eq!(unfold([13, 8, 4, 13], 12, [9, 13, 11]), 't');
+        let hdf_file = hdf5::File::open("full.h5").unwrap();
+        let dataset = hdf_file.dataset("normalized").unwrap().read().unwrap();
+        assert_eq!(
+            unfold([44, 32, 105, 110], 13, [116, 104, 101], &dataset),
+            ' '
+        ); // If everything is clear
+        assert_eq!(unfold([13, 8, 4, 13], 12, [9, 13, 11], &dataset), 't');
         // Everything unsertant
     }
 }
@@ -233,6 +246,9 @@ impl Decoder {
         }
     }
     pub fn decode(&mut self) -> Result<(), std::io::Error> {
+        let hdf_file = hdf5::File::open("full.h5").unwrap();
+        let dataset = hdf_file.dataset("normalized").unwrap().read().unwrap();
+
         let mut rotation_array: [u8; 8] = [0; 8];
         let mut buffer = [0; BUFFERMAX];
         let mut state: State = State::Skipping;
@@ -258,7 +274,7 @@ impl Decoder {
                         ];
                         let after_array = [rotation_array[5], rotation_array[6], rotation_array[7]];
                         rotation_array[4] =
-                            unfold(befor_array, rotation_array[4], after_array) as u8;
+                            unfold(befor_array, rotation_array[4], after_array, &dataset) as u8;
                         state = State::Skipping;
                     }
                     Wait::Unfolding(val) if val == 0 => waiter = Wait::Stop,
@@ -301,7 +317,7 @@ impl Decoder {
                             let after_array =
                                 [rotation_array[5], rotation_array[6], rotation_array[7]];
                             rotation_array[4] =
-                                unfold(befor_array, rotation_array[4], after_array) as u8;
+                                unfold(befor_array, rotation_array[4], after_array, &dataset) as u8;
                             state = State::Skipping;
                             waiter = Wait::Unfolding(4);
                         }
@@ -327,7 +343,8 @@ impl Decoder {
                                 let after_array =
                                     [rotation_array[5], rotation_array[6], rotation_array[7]];
                                 rotation_array[4] =
-                                    unfold(befor_array, rotation_array[4], after_array) as u8;
+                                    unfold(befor_array, rotation_array[4], after_array, &dataset)
+                                        as u8;
                             }
                         }
                     },
@@ -343,7 +360,8 @@ impl Decoder {
                     rotation_array[3],
                 ];
                 let after_array = [rotation_array[5], rotation_array[6], rotation_array[7]];
-                rotation_array[4] = unfold(befor_array, rotation_array[4], after_array) as u8;
+                rotation_array[4] =
+                    unfold(befor_array, rotation_array[4], after_array, &dataset) as u8;
             }
             _ => (),
         }
