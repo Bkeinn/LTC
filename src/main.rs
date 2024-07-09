@@ -31,6 +31,9 @@ enum Action {
         #[arg(short, long)]
         ///File the decoded is written to
         output: String,
+        #[arg(short, long)]
+        ///HDF5 file with the weights
+        hdf5: String,
     },
 }
 
@@ -81,7 +84,11 @@ fn main() {
                 _ => panic!("This compression type is not implemented"),
             }
         }
-        Action::Decode { input, output } => {
+        Action::Decode {
+            input,
+            output,
+            hdf5,
+        } => {
             let file = match std::fs::File::open(input) {
                 Ok(file) => file,
                 Err(e) => panic!("Error: unable to open input file {}", e),
@@ -90,11 +97,19 @@ fn main() {
                 Ok(file) => file,
                 Err(e) => panic!("Error: unable to open input file {}", e),
             };
+
+            let hdf5 = match hdf5::File::open(hdf5) {
+                Ok(file) => file,
+                Err(e) => panic!("Error: unable to open weights file {e}"),
+            };
+
             print!(
                 "Input file: {:?}\nOutput file: {:?}\nStatus: ",
                 file, output_file
             );
-            match decoder::Decoder::new(file, output_file, decoder::EncoderType::Lossy).decode() {
+            match decoder::Decoder::new(file, output_file, decoder::EncoderType::Lossy, hdf5)
+                .decode()
+            {
                 Ok(_) => println!("Finished"),
                 Err(e) => println!("Error: Something went wrong {}", e),
             }

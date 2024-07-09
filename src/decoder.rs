@@ -1,3 +1,4 @@
+use hdf5;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
@@ -235,19 +236,30 @@ pub struct Decoder {
     read_file: File,
     write_file: File,
     compress_type: EncoderType,
+    weight_file: hdf5::File,
 }
 
 impl Decoder {
-    pub fn new(read_file: File, write_file: File, compress_type: EncoderType) -> Decoder {
+    pub fn new(
+        read_file: File,
+        write_file: File,
+        compress_type: EncoderType,
+        weight_file: hdf5::File,
+    ) -> Decoder {
         Decoder {
             read_file,
             write_file,
             compress_type,
+            weight_file,
         }
     }
     pub fn decode(&mut self) -> Result<(), std::io::Error> {
-        let hdf_file = hdf5::File::open("full.h5").unwrap();
-        let dataset = hdf_file.dataset("normalized").unwrap().read().unwrap();
+        let dataset = self
+            .weight_file
+            .dataset("normalized")
+            .unwrap()
+            .read()
+            .unwrap();
 
         let mut rotation_array: [u8; 8] = [0; 8];
         let mut buffer = [0; BUFFERMAX];
