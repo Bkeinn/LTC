@@ -18,14 +18,18 @@ struct Cli {
 enum Action {
     Encode {
         #[arg(short, long)]
+        ///File to encode
         input: String,
         #[arg(short, long)]
+        ///File the output is written to
         output: String,
     },
     Decode {
         #[arg(short, long)]
+        ///File to decode
         input: String,
         #[arg(short, long)]
+        ///File the decoded is written to
         output: String,
     },
 }
