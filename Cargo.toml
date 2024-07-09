@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 hdf5 = "0.8.1"
 ndarray = "0.15.6"
+clap = { version = "4.5.8", features = ["derive"] }
 rayon = "1.7.0"
 serial_test = "2.0.0"
 
